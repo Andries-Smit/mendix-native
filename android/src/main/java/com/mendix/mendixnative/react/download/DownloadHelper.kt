@@ -4,7 +4,6 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import java.io.*
 import java.net.ConnectException
-import kotlin.math.abs
 
 @Throws(
   IllegalArgumentException::class,
@@ -110,19 +109,20 @@ class DownloadResponseHandler(
         BufferedOutputStream(FileOutputStream(outputFile))
 
       val totalBytes = response.body!!.contentLength().toDouble()
+      // Report every 1%, or every 64 KB when the server sends no Content-Length (totalBytes = -1)
       val progressCallbackInvoker = makeProgressCallbackInvoker(
-        totalBytes / 100,
+        if (totalBytes > 0) totalBytes / 100 else 64.0 * 1024,
         progressCallback
       )
 
-      var receivedBytes: Double
-      var data = inputStream.read()
-      while (data != -1) {
-        outputStream.write(data)
-        data = inputStream.read()
-
-        receivedBytes = abs(inputStream.available().toDouble() - totalBytes)
+      val buffer = ByteArray(8 * 1024)
+      var receivedBytes = 0.0
+      var read = inputStream.read(buffer)
+      while (read != -1) {
+        outputStream.write(buffer, 0, read)
+        receivedBytes += read
         progressCallbackInvoker(receivedBytes, totalBytes)
+        read = inputStream.read(buffer)
       }
       outputStream.flush()
     } catch (e: Exception) {
