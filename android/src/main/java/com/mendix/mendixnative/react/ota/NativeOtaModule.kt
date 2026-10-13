@@ -86,15 +86,34 @@ class NativeOtaModule(
       ),
       onSuccess = {
         Log.i(TAG, "OTA downloaded.")
+        notifyDownloadFinished()
         promise.resolve(WritableNativeMap().also {
           it.putString(DOWNLOAD_RESULT_OTA_PACKAGE_KEY, zipFileName)
         })
       },
       onFailure = {
         Log.e(TAG, "OTA download failed.")
+        notifyDownloadFinished()
         promise.reject(OTA_DOWNLOAD_FAILED, it)
+      },
+      progressCallback = { receivedBytes, totalBytes ->
+        notifyDownloadProgress(receivedBytes.toLong(), totalBytes.toLong())
       }
     )
+  }
+
+  private fun notifyDownloadProgress(receivedBytes: Long, totalBytes: Long) {
+    val listener = OtaDownloadProgress.listener ?: return
+    UiThreadUtil.runOnUiThread {
+      reactApplicationContext.currentActivity?.let {
+        listener.onOtaDownloadProgress(it, receivedBytes, totalBytes)
+      }
+    }
+  }
+
+  private fun notifyDownloadFinished() {
+    val listener = OtaDownloadProgress.listener ?: return
+    UiThreadUtil.runOnUiThread { listener.onOtaDownloadFinished() }
   }
 
   /**

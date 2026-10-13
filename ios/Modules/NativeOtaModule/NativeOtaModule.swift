@@ -25,6 +25,29 @@ public class OtaDownloadConfiguration: NSObject {
     }
 }
 
+/// Posts OTA download progress on the main queue so the app can render it, e.g. on the splash screen.
+/// The progress notification's userInfo holds `receivedBytes` and `totalBytes` (Int64, -1 when unknown).
+public enum OtaDownloadProgress {
+    public static let progressNotification = Notification.Name("MxOtaDownloadProgress")
+    public static let finishedNotification = Notification.Name("MxOtaDownloadFinished")
+
+    static func post(receivedBytes: Int64, totalBytes: Int64) {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: progressNotification,
+                object: nil,
+                userInfo: ["receivedBytes": receivedBytes, "totalBytes": totalBytes]
+            )
+        }
+    }
+
+    static func postFinished() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: finishedNotification, object: nil)
+        }
+    }
+}
+
 @objcMembers
 public class NativeOtaModule: NSObject {
     
@@ -92,14 +115,23 @@ public class NativeOtaModule: NSObject {
         let zipFilename = generateZipFilename()
         let downloadPath = OtaHelpers.resolveAbsolutePathRelativeToOtaDir("/\(zipFilename)")
         
+        var lastProgressStep: Int64 = -1
         let downloadHandler = NativeDownloadHandler(
             connectionTimeout: nil,
             mimeType: nil,
             doneCallback: {
+                OtaDownloadProgress.postFinished()
                 promise.resolve(["otaPackage": zipFilename])
             },
-            progressCallback: nil,
+            progressCallback: { received, total in
+                // Report every 1%, or every 64 KB when the server sends no Content-Length (total = -1)
+                let step = total > 0 ? received * 100 / total : received / 65_536
+                guard step != lastProgressStep else { return }
+                lastProgressStep = step
+                OtaDownloadProgress.post(receivedBytes: received, totalBytes: total)
+            },
             failCallback: { error in
+                OtaDownloadProgress.postFinished()
                 promise.reject(OTA_DOWNLOAD_FAILED, "OTA download failed.", error)
             }
         )
