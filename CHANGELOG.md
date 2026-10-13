@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- We fixed slow file and OTA downloads on Android, and their download progress being reported incorrectly.
+- We added OTA download progress hooks for the app, so it can show download progress, for example on the splash screen.
+
 ## [v0.5.3] - 2026-09-15
 
 - We migrated iOS to the UIKit scene-based life cycle.
